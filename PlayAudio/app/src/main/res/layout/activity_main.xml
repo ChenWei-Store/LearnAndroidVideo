@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/activity_main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    tools:context="com.learnvideo.playaudio.MainActivity">
+
+    <TextView
+        android:id="@+id/tv_count_down"
+        android:layout_width="100dp"
+        android:layout_height="24dp"
+        android:layout_marginTop="20dp"
+        android:layout_gravity="center_horizontal"
+        android:text="计时区域"
+        android:textColor="@android:color/black"
+        android:textSize="14sp"/>
+
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal">
+        <TextView
+            android:id="@+id/tv_record_start"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:layout_marginLeft="14dp"
+            android:background="@android:color/holo_blue_dark"
+            android:layout_gravity="center_horizontal"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:text="record start" />
+
+        <View
+            android:layout_width="18dp"
+            android:layout_height="match_parent" />
+        <TextView
+            android:id="@+id/tv_record_stop"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:layout_marginRight="14dp"
+            android:background="@android:color/holo_blue_dark"
+            android:layout_gravity="center_horizontal"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:text="record stop" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal">
+        <TextView
+            android:id="@+id/tv_play_start"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:layout_marginLeft="14dp"
+            android:background="@android:color/holo_blue_dark"
+            android:layout_gravity="center_horizontal"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:text="play start" />
+
+        <View
+            android:layout_width="18dp"
+            android:layout_height="match_parent" />
+        <TextView
+            android:id="@+id/tv_play_stop"
+            android:layout_width="0dp"
+            android:layout_height="60dp"
+            android:layout_weight="1"
+            android:layout_marginRight="14dp"
+            android:background="@android:color/holo_blue_dark"
+            android:layout_gravity="center_horizontal"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:text="play stop" />
+
+    </LinearLayout>
+
+</LinearLayout>
