@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="ShowImageSurfaceView">
+        <attr name="drawableId" format="reference" />
+        <attr name="scaleType">
+            <enum name="def" value="0" />
+            <enum name="x" value="1" />
+            <enum name="y" value="2" />
+        </attr>
+    </declare-styleable>
+
+    <declare-styleable name="ShowImageView">
+        <attr name="drawableRes" format="reference" />
+    </declare-styleable>
+
+</resources>

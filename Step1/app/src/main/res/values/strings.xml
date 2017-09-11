@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Step1</string>
+    <string name="action_settings">Settings</string>
+    <string name="title_activity_show_image_by_surface">ShowImageBySurfaceActivity</string>
+</resources>
