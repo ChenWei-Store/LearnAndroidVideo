@@ -7,14 +7,21 @@ import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.os.Build;
-import android.os.CountDownTimer;
 import android.support.v4.content.ContextCompat;
 import android.util.Log;
 import android.widget.Toast;
 
+import com.learnvideo.playaudio.Utils;
 import com.learnvideo.playaudio.exception.InitializeFailException;
-import com.learnvideo.playaudio.exception.NoBufferDataException;
-import com.learnvideo.playaudio.model.AudioParams;
+import com.learnvideo.playaudio.model.PlayParams;
+import com.learnvideo.playaudio.model.RecordParams;
+
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 
 /**
@@ -26,14 +33,15 @@ public class PlayAudioManager{
     private static PlayAudioManager playAudioManager;
     private AudioRecord audioRecord;
 
-    private byte[] bytesBuffer;
     private short[] shortBuffer;
-    private float[] floatBuffer;
 
-    private int pcmSize;
     private AudioTrack audioTrack;
-    private AudioParams audioParams;
+    private RecordParams audioParams;
+    private PlayParams playParams;
     private Context appContext;
+    private String pcmFileName;
+    private RecordThread recordThread;
+    private PlayThread playThread;
     public static final String TAG = PlayAudioManager.class.getSimpleName();
     private PlayAudioManager(Context context){
         appContext = context.getApplicationContext();
@@ -48,7 +56,7 @@ public class PlayAudioManager{
         return playAudioManager;
     }
 
-    public void setAudioConfig(AudioParams audioParams){
+    public void setAudioConfig(RecordParams audioParams){
         if(audioParams.getBufferSizeInBytes() < AudioRecord.getMinBufferSize(audioParams.getSampleRateInHz(),
                 audioParams.getChannelConfig(), audioParams.getAudioFormat())){
             throw new IllegalArgumentException("bufferSizeInBytes 不能小于" +
@@ -61,6 +69,10 @@ public class PlayAudioManager{
         }
 
         this.audioParams = audioParams;
+    }
+
+    public void setPlayConfig(PlayParams playParams){
+        this.playParams = playParams;
     }
 
 
@@ -82,19 +94,26 @@ public class PlayAudioManager{
         }
         audioRecord = new AudioRecord(audioParams.getAudioSource(), audioParams.getSampleRateInHz(),
                 audioParams.getChannelConfig(), audioParams.getAudioFormat(), audioParams.getBufferSizeInBytes());
-
-        new RecordThread().start();
-
+        recordThread = new RecordThread();
+        recordThread.setRecord(true);
+        recordThread.start();
     }
 
-
+    /**
+     * 停止录音
+     */
     public void stopRecordAudio(){
         Log.e(TAG, "stopRecordAudio");
-
-        if(audioRecord == null){
-            return;
+        if(recordThread != null) {
+            recordThread.setRecord(false);
+            recordThread = null;
         }
-        audioRecord.stop();
+        if(audioRecord != null) {
+            audioRecord.stop();
+            audioRecord.release();
+            audioRecord = null;
+        }
+
     }
 
     public void saveWavFile(String filePath){
@@ -102,91 +121,128 @@ public class PlayAudioManager{
     }
 
     public void release(){
-        audioRecord.release();
-        audioRecord = null;
-        audioTrack.release();
-        audioTrack = null;
+        stopRecordAudio();
+        stopPlay();
     }
 
 
-
-    class RecordThread extends Thread{
-        @Override
-        public void run() {
-            super.run();
-
-            int resultCode = 0;
-            if(audioParams.getAudioFormat() == AudioFormat.ENCODING_PCM_16BIT ) {
-                shortBuffer = new short[audioParams.getBufferSizeInBytes() / 2];
-                audioRecord.startRecording();
-                resultCode = audioRecord.read(shortBuffer, 0 , shortBuffer.length);
-            }else if(audioParams.getAudioFormat() == AudioFormat.ENCODING_PCM_8BIT){
-                bytesBuffer = new byte[audioParams.getBufferSizeInBytes()];
-                audioRecord.startRecording();
-                resultCode = audioRecord.read(bytesBuffer, 0, bytesBuffer.length);
-            }
-            else if(audioParams.getAudioFormat() == AudioFormat.ENCODING_PCM_FLOAT){
-                floatBuffer = new float[audioParams.getBufferSizeInBytes() / 4];
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    audioRecord.startRecording();
-                    resultCode = audioRecord.read(floatBuffer, 0, floatBuffer.length, AudioRecord.READ_BLOCKING);
-                }else{
-                    Log.e(TAG, "ENCODING_PCM_FLOAT 采样精度只能在API 23 及以上使用");
-                }
-            }
-
-            Log.e(TAG, "record code:" + resultCode);
-
-            if(resultCode < 0){
-                Log.e(TAG, "record error");
-                Log.e(TAG, "error code: " + resultCode);
-                throw new InitializeFailException("AudioRecord 初始化失败");
-            }else{
-                Log.e(TAG, "record success");
-            }
-            pcmSize = resultCode;
-            stopRecordAudio();
-        }
-    }
-
-    public void setBytesBuffer(byte[] bytesBuffer) {
-        this.bytesBuffer = bytesBuffer;
-    }
-
-    public void setShortBuffer(short[] shortBuffer) {
-        this.shortBuffer = shortBuffer;
-    }
-
-    public void setFloatBuffer(float[] floatBuffer) {
-        this.floatBuffer = floatBuffer;
-    }
 
     /**
      *
-     * @param streamType
-     * @param mode
+     * @param mode 仅支持Android 8.0以下版本，Android 8.0中该构造方法已被废弃
      */
-    public void startPlay(int streamType, int mode){
-        if((shortBuffer == null || shortBuffer.length == 0) && (bytesBuffer == null ||
-                bytesBuffer.length == 0) && (floatBuffer == null || floatBuffer.length == 0)){
-            throw new NoBufferDataException("要播放的音频流为null");
+    public void startPlay(int mode){
+        audioTrack = new AudioTrack(playParams.getStreamType(), playParams.getSampleRateInHz(), playParams.getChannelConfig(),
+                playParams.getAudioFormat(), playParams.getBufferSizeInBytes(), mode);
+        playThread = new PlayThread();
+        playThread.setIsPlay(true);
+        playThread.start();
+    }
+
+    public void stopPlay(){
+        Log.d(TAG, "stopPlay");
+        if(playThread != null) {
+            playThread.setIsPlay(false);
+            playThread = null;
+        }
+        if(audioTrack != null) {
+            audioTrack.flush();
+            audioTrack.stop();
+            audioTrack.release();
+            audioTrack = null;
         }
 
-        audioTrack = new AudioTrack(streamType, audioParams.getSampleRateInHz(), audioParams.getChannelConfig(),
-                audioParams.getAudioFormat(), audioParams.getBufferSizeInBytes(), mode);
-        audioTrack.play();
-        if(audioParams.getAudioFormat() == AudioFormat.ENCODING_PCM_16BIT ) {
-          audioTrack.write(shortBuffer, 0, shortBuffer.length);
-        }else if(audioParams.getAudioFormat() == AudioFormat.ENCODING_PCM_8BIT){
-            audioTrack.write(shortBuffer, 0, shortBuffer.length);
-        }else if(audioParams.getAudioFormat() == AudioFormat.ENCODING_PCM_FLOAT){
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                audioRecord.startRecording();
-                audioTrack.write(floatBuffer, 0, floatBuffer.length, AudioTrack.WRITE_BLOCKING);
-            }else{
-                Log.e(TAG, "ENCODING_PCM_FLOAT 采样精度只能在API 23 及以上使用");
+    }
+
+    class RecordThread extends Thread {
+        private boolean isRecord;
+
+        @Override
+        public void run() {
+            shortBuffer = new short[audioParams.getBufferSizeInBytes() / 2];
+            audioRecord.startRecording();
+
+            writePcmToFile();
+        }
+
+        public void setRecord(boolean isRecord){
+            this.isRecord = isRecord;
+        }
+
+        /**
+         * 读取pcm数据并保存在文件中
+         */
+        private void writePcmToFile() {
+            pcmFileName = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+            FileOutputStream fos = null;
+            int resultCode = 0;
+            try {
+                fos = appContext.openFileOutput(pcmFileName, Context.MODE_PRIVATE);
+                while (isRecord) {
+                    resultCode = audioRecord.read(shortBuffer, 0, shortBuffer.length);
+                    byte[] bytes = Utils.short2Byte(shortBuffer);
+                    fos.write(bytes);
+                    Log.d(TAG, "resultCode: " + resultCode);
+                }
+            } catch (FileNotFoundException e) {
+                Log.e(TAG, "创建pcm文件失败");
+                e.printStackTrace();
+            } catch (IOException e) {
+                Log.e(TAG, "pcm文件写入失败");
+                e.printStackTrace();
+            }finally {
+                try {
+                    fos.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+        }
+    }
+
+    class PlayThread extends Thread{
+        private boolean isPlay;
+        @Override
+        public void run() {
+            super.run();
+            FileInputStream fis = null;
+            byte []bytes = null;
+            try {
+                fis = appContext.openFileInput(pcmFileName);
+                bytes = new byte[fis.available()];
+                fis.read(bytes);
+                short []data = Utils.byte2Short(bytes);
+                int temp = playParams.getBufferSizeInBytes() / 2;
+                int offsetInShorts = 0;  //每次播放pcm数据的偏移量
+                int sizeInShorts = temp; //把该数据作为一个单元
+                audioTrack.play();
+                while (isPlay) {
+                    if(audioTrack != null) {
+                        audioTrack.write(data, offsetInShorts, sizeInShorts);
+                    }
+                    offsetInShorts += sizeInShorts;
+                    if(offsetInShorts >= data.length){
+                        stopPlay();
+                    }
+                }
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+                try {
+                    fis.close();
+                } catch (IOException e1) {
+                    e1.printStackTrace();
+                }
+
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
+
+        public void setIsPlay(boolean isPlay){
+            this.isPlay = isPlay;
+        }
+
     }
 
 
