@@ -23,7 +23,6 @@ public class ShowImageView extends View {
     @DrawableRes
     private int drawableId;
     private Bitmap bmp;
-
     public ShowImageView(Context context) {
         this(context, null);
     }

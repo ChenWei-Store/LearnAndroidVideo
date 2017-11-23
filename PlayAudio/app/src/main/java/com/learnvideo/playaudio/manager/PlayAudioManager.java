@@ -12,7 +12,6 @@ import android.util.Log;
 import android.widget.Toast;
 
 import com.learnvideo.playaudio.Utils;
-import com.learnvideo.playaudio.exception.InitializeFailException;
 import com.learnvideo.playaudio.model.PlayParams;
 import com.learnvideo.playaudio.model.RecordParams;
 
