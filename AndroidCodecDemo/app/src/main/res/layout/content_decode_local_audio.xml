@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/content_decode_local_audio"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    app:layout_behavior="@string/appbar_scrolling_view_behavior"
+    tools:context="com.learnvideo.androidcodecdemo.DecodeLocalAudioActivity"
+    tools:showIn="@layout/activity_decode_local_audio">
+
+    <TextView
+        android:id="@+id/tv_decode_audio"
+        android:layout_width="100dp"
+        android:layout_height="50dp"
+        android:layout_marginTop="20dp"
+        android:layout_gravity="center_horizontal"
+        android:gravity="center"
+        android:text="播放mp4音频"
+        android:textColor="@android:color/white"
+        android:background="@android:color/holo_blue_dark"/>
+
+
+</LinearLayout>
