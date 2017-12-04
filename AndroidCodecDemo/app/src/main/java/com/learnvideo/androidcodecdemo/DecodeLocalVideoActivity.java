@@ -4,8 +4,7 @@ import android.content.res.AssetFileDescriptor;
 import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
-import android.media.MediaMuxer;
-import android.media.MediaPlayer;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -14,16 +13,12 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.Surface;
-import android.view.SurfaceHolder;
-import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
 import android.widget.TextView;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class DecodeLocalVideoActivity extends AppCompatActivity {
     private TextView tvDecodeVideo;
@@ -35,11 +30,11 @@ public class DecodeLocalVideoActivity extends AppCompatActivity {
 
     private AssetFileDescriptor testFd;
     private static final String TAG = "decodeVideo";
-    private static final int MOVIE_FRAME_RATE = 24;
-    private static final int ONE_FRAME_MS = 1000 / MOVIE_FRAME_RATE;
 
     private TextureView textureView;
     private TextView tvStatus;
+    private boolean isFirstStart = true;
+    private long startTime;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -52,7 +47,13 @@ public class DecodeLocalVideoActivity extends AppCompatActivity {
             @Override
             public void handleMessage(Message msg) {
                 super.handleMessage(msg);
-                decodeVideo();
+                try {
+                    decodeVideo();
+                }catch (IllegalStateException e){
+                    //在播放时点击back键发生异常
+                    isFirstStart = true;
+                    releaseMediaData();
+                }
             }
         };
         textureView = (TextureView) findViewById(R.id.texture_view);
@@ -77,6 +78,8 @@ public class DecodeLocalVideoActivity extends AppCompatActivity {
                 releaseMediaData();
             }
         });
+
+
     }
 
 
@@ -113,7 +116,8 @@ public class DecodeLocalVideoActivity extends AppCompatActivity {
                 //初始化mediacodec
                 try {
                     mediaCodec = MediaCodec.createDecoderByType(mime);
-                    mediaCodec.configure(mediaFormat, new Surface(textureView.getSurfaceTexture()), null, 0);
+                    mediaCodec.configure(mediaFormat, new Surface(textureView.getSurfaceTexture()),
+                            null, 0);
 
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -135,53 +139,72 @@ public class DecodeLocalVideoActivity extends AppCompatActivity {
         //获取输入输出缓冲区
         ByteBuffer[] outputBuffers =  mediaCodec.getOutputBuffers();
         ByteBuffer[] inputBuffers = mediaCodec.getInputBuffers();
+        boolean isInputEnd = false;
 
         while(true) {
-            int inputBufferIndex = -1;
-
-            //获取当前可以使用的输入缓冲区坐标
-            try {
+            if(!isInputEnd) {
+                int inputBufferIndex = -1;
+                //获取当前可以使用的输入缓冲区坐标
                 inputBufferIndex = mediaCodec.dequeueInputBuffer(10000);
-            }catch (IllegalStateException e){
-                //由于在onPause方法中将mediacodec状态改变，
-                // 不在Executing状态了，所以该处发生异常，捕获防止闪退
-                return;
-            }
-            boolean isdExtractorDataFinish = false; //当前是否解封装完数据
 
-            //获取解封装的数据并传入codec的输入缓冲流
-            if (inputBufferIndex >= 0 && !isdExtractorDataFinish) {
-                //当前有可用的缓冲数据
-                ByteBuffer inputBuffer = inputBuffers[inputBufferIndex];
-                int readSampleDataSize = mediaExtractor.readSampleData(inputBuffer, 0);
-                if (readSampleDataSize >= 0) {
-                    //解封装未完成，将数据传入输入缓冲流
-                    mediaCodec.queueInputBuffer(inputBufferIndex, 0, readSampleDataSize, mediaExtractor.getSampleTime(), 0);
-                    mediaExtractor.advance();
-                } else {
-                    //当前已完成解封装，传递结束标识符
-                    mediaCodec.queueInputBuffer(inputBufferIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-                    isdExtractorDataFinish = true;
+                //获取解封装的数据并传入codec的输入缓冲流
+                if (inputBufferIndex >= 0) {
+                    //当前有可用的缓冲数据
+                    ByteBuffer inputBuffer = inputBuffers[inputBufferIndex];
+                    int readSampleDataSize = mediaExtractor.readSampleData(inputBuffer, 0);
+                    if (readSampleDataSize >= 0) {
+                        //解封装未完成，将数据传入输入缓冲流
+                        mediaCodec.queueInputBuffer(inputBufferIndex, 0, readSampleDataSize, mediaExtractor.getSampleTime(), 0);
+                    }
+                    boolean result = mediaExtractor.advance();
+                    if(!result){
+                        //循环确保END_OF_STREAM发送成功
+                        while (true) {
+                            inputBufferIndex = mediaCodec.dequeueInputBuffer(10000);
+                            if(inputBufferIndex < 0){
+                                continue;
+                            }
+                            mediaCodec.queueInputBuffer(inputBufferIndex, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                            isInputEnd = true;
+                            break;
+                        }
+                    }
+                    Log.d(TAG, "inputBufferIndex: " + inputBufferIndex);
                 }
-                Log.d(TAG, "inputBufferIndex: " + inputBufferIndex);
             }
-
             //获取codec输出缓冲流中数据，并显示在界面上
 
 
             MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
             int outputBufferIndex = -1;
-            try {
-                outputBufferIndex = mediaCodec.dequeueOutputBuffer(bufferInfo, 15000);
-            }catch (IllegalStateException e){
-                //由于在onPause方法中将mediacodec状态改变，
-                // 不在Executing状态了，所以该处发生异常，捕获防止闪退
-                return;
-            }
+            outputBufferIndex = mediaCodec.dequeueOutputBuffer(bufferInfo, 10000);
 
             if (outputBufferIndex >= 0) {
-                ByteBuffer byteBuffer = outputBuffers[outputBufferIndex];
+                ByteBuffer byteBuffer = null;
+                if ( Build.VERSION.SDK_INT >= 21) {
+                    byteBuffer = mediaCodec.getOutputBuffer(outputBufferIndex);
+                } else {
+                    byteBuffer = outputBuffers[outputBufferIndex];
+                }
+                if(isFirstStart){
+                    //开始录制时，记录开始播放时的时间
+                    startTime = System.currentTimeMillis();
+                    isFirstStart = false;
+                }
+
+                long ptsTime = startTime + bufferInfo.presentationTimeUs / 1000;
+                long currentTime = System.currentTimeMillis();
+                long deltaTime = ptsTime - currentTime;
+
+                if( deltaTime > 0 ) {
+                    try {
+                        Thread.sleep(deltaTime);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
                 mediaCodec.releaseOutputBuffer(outputBufferIndex, true);
+
             }
             Log.d(TAG, "outputBufferIndex: " + outputBufferIndex);
 
@@ -189,20 +212,14 @@ public class DecodeLocalVideoActivity extends AppCompatActivity {
             if ((bufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
                 break;
             }
-
-            try {
-                //每次执行后停止ONE_FRAME_MSms，防止刷新过快
-                Thread.sleep(ONE_FRAME_MS);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
         }
+        isFirstStart = true;
         releaseMediaData();
 
         Log.d(TAG, " end");
     }
 
-    private void releaseMediaData(){
+    private synchronized void releaseMediaData(){
         if(mediaCodec != null){
             mediaCodec.stop();
             mediaCodec.release();
@@ -224,4 +241,6 @@ public class DecodeLocalVideoActivity extends AppCompatActivity {
         threadHandler = null;
         super.onPause();
     }
+
+
 }
